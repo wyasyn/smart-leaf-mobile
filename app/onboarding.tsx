@@ -1,18 +1,27 @@
+import { setHasOnboarded } from "@/utils/constants";
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
-  Dimensions,
   FlatList,
+  ListRenderItemInfo,
   SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 
-const slides = [
+interface Slide {
+  id: string;
+  title: string;
+  description: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}
+
+const slides: Slide[] = [
   {
     id: "1",
     title: "Scan Plant Leaves",
@@ -38,41 +47,48 @@ const slides = [
 
 export default function OnboardingScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<FlatList<Slide>>(null);
+  const { width } = useWindowDimensions();
 
-  const renderSlide = ({ item }: { item: (typeof slides)[0] }) => (
-    <View style={onboardingStyles.slide}>
-      <View style={onboardingStyles.iconContainer}>
-        <Ionicons name={item.icon as any} size={80} color="#22C55E" />
+  const renderSlide = useCallback(
+    ({ item }: ListRenderItemInfo<Slide>) => (
+      <View style={[styles.slide, { width }]}>
+        <View style={styles.iconContainer}>
+          <Ionicons name={item.icon} size={80} color="#22C55E" />
+        </View>
+        <Text style={styles.title}>{item.title}</Text>
+        <Text style={styles.description}>{item.description}</Text>
       </View>
-      <Text style={onboardingStyles.title}>{item.title}</Text>
-      <Text style={onboardingStyles.description}>{item.description}</Text>
-    </View>
+    ),
+    [width]
   );
 
-  const nextSlide = async () => {
+  const handleNext = async () => {
+    Haptics.selectionAsync();
     if (currentIndex < slides.length - 1) {
       const nextIndex = currentIndex + 1;
       flatListRef.current?.scrollToIndex({ index: nextIndex });
       setCurrentIndex(nextIndex);
     } else {
-      await AsyncStorage.setItem("hasOnboarded", "true");
+      await setHasOnboarded().catch(console.error);
       router.replace("/(tabs)");
     }
   };
 
   const skipOnboarding = async () => {
-    await AsyncStorage.setItem("hasOnboarded", "true");
+    await setHasOnboarded().catch(console.error);
     router.replace("/(tabs)");
   };
 
   return (
-    <SafeAreaView style={onboardingStyles.container}>
+    <SafeAreaView style={styles.container}>
       <TouchableOpacity
-        style={onboardingStyles.skipButton}
+        style={styles.skipButton}
         onPress={skipOnboarding}
+        accessibilityRole="button"
+        accessibilityLabel="Skip Onboarding"
       >
-        <Text style={onboardingStyles.skipText}>Skip</Text>
+        <Text style={styles.skipText}>Skip</Text>
       </TouchableOpacity>
 
       <FlatList
@@ -80,35 +96,44 @@ export default function OnboardingScreen() {
         data={slides}
         renderItem={renderSlide}
         horizontal
-        showsHorizontalScrollIndicator={false}
         pagingEnabled
-        bounces={false}
+        showsHorizontalScrollIndicator={false}
         keyExtractor={(item) => item.id}
-        onScroll={(event) => {
-          const slideSize = event.nativeEvent.layoutMeasurement.width;
-          const index = event.nativeEvent.contentOffset.x / slideSize;
-          setCurrentIndex(Math.round(index));
+        bounces={false}
+        getItemLayout={(_, index) => ({
+          length: width,
+          offset: width * index,
+          index,
+        })}
+        onScroll={(e) => {
+          const index = Math.round(e.nativeEvent.contentOffset.x / width);
+          setCurrentIndex(index);
         }}
+        scrollEventThrottle={16}
       />
 
-      <View style={onboardingStyles.footer}>
-        <View style={onboardingStyles.pagination}>
+      <View style={styles.footer}>
+        <View style={styles.pagination}>
           {slides.map((_, index) => (
             <View
               key={index}
               style={[
-                onboardingStyles.paginationDot,
-                index === currentIndex && onboardingStyles.paginationDotActive,
+                styles.paginationDot,
+                index === currentIndex && styles.paginationDotActive,
               ]}
             />
           ))}
         </View>
 
         <TouchableOpacity
-          style={onboardingStyles.nextButton}
-          onPress={nextSlide}
+          style={styles.nextButton}
+          onPress={handleNext}
+          accessibilityRole="button"
+          accessibilityLabel={
+            currentIndex === slides.length - 1 ? "Get Started" : "Next Slide"
+          }
         >
-          <Text style={onboardingStyles.nextButtonText}>
+          <Text style={styles.nextButtonText}>
             {currentIndex === slides.length - 1 ? "Get Started" : "Next"}
           </Text>
           <Ionicons name="arrow-forward" size={20} color="white" />
@@ -118,7 +143,7 @@ export default function OnboardingScreen() {
   );
 }
 
-const onboardingStyles = StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F9FAFB",
@@ -139,7 +164,6 @@ const onboardingStyles = StyleSheet.create({
     fontWeight: "600",
   },
   slide: {
-    width: Dimensions.get("window").width,
     flex: 1,
     alignItems: "center",
     justifyContent: "center",

@@ -1,43 +1,85 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import * as Haptics from "expo-haptics";
+import { router, useFocusEffect } from "expo-router"; // expo-router re-exports useFocusEffect
+import React, { useCallback, useState } from "react";
 import {
+  Platform,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 
+/* ──────────────────────────────────
+   Types & constants
+   ────────────────────────────────── */
+const STORAGE_KEYS = {
+  PLANT_LOGS: "@plantLogs",
+} as const;
+
+interface PlantLog {
+  id: string;
+  date: string; // ISO string
+  result: string; // whatever you store (diagnosis, etc.)
+}
+
+/* ──────────────────────────────────
+   Screen component
+   ────────────────────────────────── */
 export default function HomeScreen() {
   const [totalScans, setTotalScans] = useState(0);
   const [todayScans, setTodayScans] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  const loadStats = async () => {
+  /* loadStats is memoised so the reference stays stable */
+  const loadStats = useCallback(async () => {
     try {
-      const logs = await AsyncStorage.getItem("plantLogs");
-      if (logs) {
-        const parsedLogs = JSON.parse(logs);
-        setTotalScans(parsedLogs.length);
-
-        const today = new Date().toDateString();
-        const todayCount = parsedLogs.filter(
-          (log: any) => new Date(log.date).toDateString() === today
-        ).length;
-        setTodayScans(todayCount);
+      const logs = await AsyncStorage.getItem(STORAGE_KEYS.PLANT_LOGS);
+      if (!logs) {
+        setTotalScans(0);
+        setTodayScans(0);
+        return;
       }
+
+      const parsedLogs: PlantLog[] = JSON.parse(logs);
+      setTotalScans(parsedLogs.length);
+
+      const todayStr = new Date().toDateString();
+      const todayCount = parsedLogs.filter(
+        (log) => new Date(log.date).toDateString() === todayStr
+      ).length;
+      setTodayScans(todayCount);
     } catch (error) {
       console.error("Error loading stats:", error);
     }
-  };
+  }, []);
 
-  const quickActions = [
+  /* Run once on mount *and* every time the screen gets focus */
+  useFocusEffect(
+    useCallback(() => {
+      loadStats();
+    }, [loadStats])
+  );
+
+  /* Pull-to-refresh handler */
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadStats();
+    setRefreshing(false);
+  }, [loadStats]);
+
+  /* Quick-action config */
+  const quickActions: {
+    id: number;
+    title: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    action: () => void;
+  }[] = [
     {
       id: 1,
       title: "Scan Leaf",
@@ -64,52 +106,72 @@ export default function HomeScreen() {
     },
   ];
 
+  /* ──────────────── render ──────────────── */
   return (
-    <SafeAreaView style={homeStyles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={homeStyles.header}>
-          <Text style={homeStyles.greeting}>Welcome to</Text>
-          <Text style={homeStyles.appName}>SmartLeaf</Text>
-          <Text style={homeStyles.subtitle}>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.appName}>SmartLeaf</Text>
+          <Text style={styles.subtitle}>
             AI-Powered Plant Disease Detection
           </Text>
         </View>
 
+        {/* Scan CTA */}
         <TouchableOpacity
-          onPress={() => router.push("/scan")}
-          activeOpacity={0.8}
-          style={homeStyles.scanButton}
+          onPress={() => {
+            Haptics.selectionAsync();
+            router.push("/scan");
+          }}
+          activeOpacity={0.85}
+          style={styles.scanButton}
+          accessibilityRole="button"
+          accessibilityLabel="Scan a plant leaf"
         >
           <Ionicons name="camera" size={32} color="white" />
-          <Text style={homeStyles.scanButtonText}>Scan Plant Leaf</Text>
+          <Text style={styles.scanButtonText}>Scan Plant Leaf</Text>
         </TouchableOpacity>
 
-        <View style={homeStyles.quickActionsContainer}>
-          <Text style={homeStyles.sectionTitle}>Quick Actions</Text>
-          <View style={homeStyles.quickActionsGrid}>
-            {quickActions.map((action) => (
+        {/* Quick Actions */}
+        <View style={styles.quickActionsContainer}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.quickActionsGrid}>
+            {quickActions.map(({ id, title, icon, action }) => (
               <TouchableOpacity
-                key={action.id}
-                style={homeStyles.quickActionCard}
-                onPress={action.action}
+                key={id}
+                style={styles.quickActionCard}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  action();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={title}
               >
-                <Ionicons name={action.icon as any} size={24} color="#22C55E" />
-                <Text style={homeStyles.quickActionText}>{action.title}</Text>
+                <Ionicons name={icon} size={24} color="#22C55E" />
+                <Text style={styles.quickActionText}>{title}</Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
 
-        <View style={homeStyles.statsContainer}>
-          <Text style={homeStyles.sectionTitle}>Your Activity</Text>
-          <View style={homeStyles.statsRow}>
-            <View style={homeStyles.statCard}>
-              <Text style={homeStyles.statNumber}>{todayScans}</Text>
-              <Text style={homeStyles.statLabel}>Scans Today</Text>
+        {/* Stats */}
+        <View style={styles.statsContainer}>
+          <Text style={styles.sectionTitle}>Your Activity</Text>
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>{todayScans}</Text>
+              <Text style={styles.statLabel}>Scans Today</Text>
             </View>
-            <View style={homeStyles.statCard}>
-              <Text style={homeStyles.statNumber}>{totalScans}</Text>
-              <Text style={homeStyles.statLabel}>Total Scans</Text>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>{totalScans}</Text>
+              <Text style={styles.statLabel}>Total Scans</Text>
             </View>
           </View>
         </View>
@@ -118,20 +180,19 @@ export default function HomeScreen() {
   );
 }
 
-const homeStyles = StyleSheet.create({
+/* ──────────────────────────────────
+   Styles
+   ────────────────────────────────── */
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F9FAFB",
+    paddingTop: 30,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 30,
-  },
-  greeting: {
-    fontSize: 16,
-    color: "#6B7280",
-    marginBottom: 4,
+    marginTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
+    marginHorizontal: 20,
+    paddingBottom: 28,
   },
   appName: {
     fontSize: 32,
@@ -149,8 +210,8 @@ const homeStyles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#22C55E",
     marginHorizontal: 20,
-    paddingVertical: 20,
-    borderRadius: 16,
+    paddingVertical: 18,
+    borderRadius: 30,
     marginBottom: 30,
     gap: 12,
   },
@@ -161,7 +222,7 @@ const homeStyles = StyleSheet.create({
   },
   quickActionsContainer: {
     paddingHorizontal: 20,
-    marginBottom: 30,
+    marginBottom: 32,
   },
   sectionTitle: {
     fontSize: 20,
@@ -178,8 +239,8 @@ const homeStyles = StyleSheet.create({
     flex: 1,
     minWidth: "47%",
     backgroundColor: "white",
-    padding: 20,
-    borderRadius: 12,
+    paddingVertical: 24,
+    borderRadius: 14,
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -191,11 +252,12 @@ const homeStyles = StyleSheet.create({
     color: "#374151",
     fontSize: 14,
     fontWeight: "500",
-    marginTop: 8,
+    marginTop: 10,
     textAlign: "center",
   },
   statsContainer: {
     paddingHorizontal: 20,
+    paddingBottom: 120,
   },
   statsRow: {
     flexDirection: "row",
@@ -204,8 +266,8 @@ const homeStyles = StyleSheet.create({
   statCard: {
     flex: 1,
     backgroundColor: "white",
-    padding: 20,
-    borderRadius: 12,
+    paddingVertical: 26,
+    borderRadius: 14,
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },

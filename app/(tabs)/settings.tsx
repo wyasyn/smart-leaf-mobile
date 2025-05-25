@@ -3,8 +3,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React from "react";
 import {
   Alert,
+  Platform,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -92,6 +94,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
       <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
         <Text style={styles.subtitle}>Manage your app preferences</Text>
@@ -142,6 +145,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F9FAFB",
   },
   header: {
+    marginTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 20,

@@ -5,8 +5,10 @@ import React from "react";
 import {
   Alert,
   Image,
+  Platform,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -113,6 +115,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F9FAFB",
   },
   header: {
+    marginTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

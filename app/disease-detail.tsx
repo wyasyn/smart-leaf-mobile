@@ -2,8 +2,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React from "react";
 import {
+  Platform,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -16,6 +18,7 @@ export default function DiseaseDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#1F2937" />
@@ -49,6 +52,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F9FAFB",
   },
   header: {
+    marginTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

@@ -5,7 +5,9 @@ import React, { useCallback, useState } from "react";
 import {
   FlatList,
   Image,
+  Platform,
   SafeAreaView,
+  StatusBar,
   StyleSheet,
   Text,
   View,
@@ -67,28 +69,36 @@ export default function LogbookScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Plant Logbook</Text>
-        <Text style={styles.subtitle}>Your scan history</Text>
-      </View>
-
-      {logs.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="book-outline" size={64} color="#9CA3AF" />
-          <Text style={styles.emptyText}>No scans yet</Text>
-          <Text style={styles.emptySubtext}>
-            Start scanning plants to build your logbook
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={logs}
-          renderItem={renderLogItem}
-          keyExtractor={(item) => item.id.toString()}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContainer}
-        />
-      )}
+      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <FlatList
+        data={logs}
+        renderItem={renderLogItem}
+        keyExtractor={(item) => item.id.toString()}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.listContainer,
+          {
+            paddingTop:
+              Platform.OS === "android" ? StatusBar.currentHeight ?? 24 : 24,
+            paddingBottom: 100,
+          },
+        ]}
+        ListHeaderComponent={() => (
+          <View style={styles.header}>
+            <Text style={styles.title}>Plant Logbook</Text>
+            <Text style={styles.subtitle}>Your scan history</Text>
+          </View>
+        )}
+        ListEmptyComponent={() => (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="book-outline" size={64} color="#9CA3AF" />
+            <Text style={styles.emptyText}>No scans yet</Text>
+            <Text style={styles.emptySubtext}>
+              Start scanning plants to build your logbook
+            </Text>
+          </View>
+        )}
+      />
     </SafeAreaView>
   );
 }
@@ -99,9 +109,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#F9FAFB",
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
     paddingBottom: 20,
+    marginTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
   },
   title: {
     fontSize: 28,
@@ -118,6 +127,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 40,
+    paddingVertical: 100,
   },
   emptyText: {
     fontSize: 20,
