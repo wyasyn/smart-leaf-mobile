@@ -1,3 +1,4 @@
+import { HAS_ONBOARDED } from "@/utils/constants";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React from "react";
@@ -47,7 +48,7 @@ export default function SettingsScreen() {
           text: "Reset",
           onPress: async () => {
             try {
-              await AsyncStorage.removeItem("hasOnboarded");
+              await AsyncStorage.removeItem(HAS_ONBOARDED);
               Alert.alert("Success", "Onboarding reset successfully");
             } catch (error) {
               console.error("Error resetting onboarding:", error);
@@ -84,7 +85,7 @@ export default function SettingsScreen() {
       action: () => {
         Alert.alert(
           "SmartLeaf",
-          "Version 1.0.0\n\nAI-powered plant disease detection app.\n\nDeveloped with React Native and Expo.",
+          "Version 1.0.0\n\nAI-powered plant disease detection app.\n\nDeveloped with React Native and Expo.\n\nDeveloped by Yasin Walum 💡.",
           [{ text: "OK" }]
         );
       },
