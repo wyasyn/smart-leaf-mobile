@@ -18,6 +18,20 @@ import {
 
 const LOGO = require("../../assets/images/icon.png");
 
+// Types for API response matching the FastAPI backend
+interface PredictionResponse {
+  success: boolean;
+  predicted_class: string;
+  clean_class_name: string;
+  confidence: number;
+  all_predictions: Record<string, number>;
+  message: string;
+}
+
+interface ApiErrorResponse {
+  detail: string;
+}
+
 type PickerAsset = ImagePicker.ImagePickerAsset | null;
 
 export default function ScanScreen() {
@@ -69,10 +83,15 @@ export default function ScanScreen() {
 
     try {
       const formData = new FormData();
-      formData.append("files", {
+
+      // Get file extension from URI or default to jpg
+      const uriParts = selectedImage.uri.split(".");
+      const fileExtension = uriParts[uriParts.length - 1] || "jpg";
+
+      formData.append("file", {
         uri: selectedImage.uri,
-        type: "image/jpeg",
-        name: "leaf.jpg",
+        type: `image/${fileExtension}`,
+        name: `leaf.${fileExtension}`,
       } as any);
 
       const response = await fetch(
@@ -80,11 +99,30 @@ export default function ScanScreen() {
         {
           method: "POST",
           body: formData,
-          headers: { "Content-Type": "multipart/form-data" },
+          headers: {
+            Accept: "application/json",
+            // Don't set Content-Type for FormData - let the browser set it with boundary
+          },
         }
       );
 
-      const result = await response.json();
+      if (!response.ok) {
+        const errorData: ApiErrorResponse = await response.json();
+        throw new Error(
+          errorData.detail || `HTTP error! status: ${response.status}`
+        );
+      }
+
+      const result: PredictionResponse = await response.json();
+
+      // Validate response structure
+      if (
+        !result.success ||
+        !result.predicted_class ||
+        !result.clean_class_name
+      ) {
+        throw new Error("Invalid response format from server");
+      }
 
       /** avoid navigating if the component unmounted */
       if (mounted.current) {
@@ -97,11 +135,19 @@ export default function ScanScreen() {
         });
       }
     } catch (error) {
-      mounted.current &&
-        Alert.alert("Error", "Failed to analyze image. Please try again.");
+      if (mounted.current) {
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Failed to analyze image. Please try again.";
+
+        Alert.alert("Analysis Error", errorMessage);
+      }
       console.error("Analysis error:", error);
     } finally {
-      mounted.current && setIsLoading(false);
+      if (mounted.current) {
+        setIsLoading(false);
+      }
     }
   }, [selectedImage]);
 
@@ -109,14 +155,21 @@ export default function ScanScreen() {
   if (hasPermission === null) {
     return (
       <SafeAreaView style={styles.centerContent}>
-        <Text>Requesting camera permission…</Text>
+        <ActivityIndicator size="large" color="#22C55E" />
+        <Text style={styles.permissionText}>Requesting camera permission…</Text>
       </SafeAreaView>
     );
   }
+
   if (hasPermission === false) {
     return (
       <SafeAreaView style={styles.centerContent}>
-        <Text>No access to camera</Text>
+        <Ionicons name="close" size={48} color="#EF4444" />
+        <Text style={styles.permissionText}>Camera access denied</Text>
+        <Text style={styles.permissionSubtext}>
+          Please enable camera permissions in your device settings to take
+          photos.
+        </Text>
       </SafeAreaView>
     );
   }
@@ -220,7 +273,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     gap: 20,
   },
-
   container: {
     flex: 1,
     backgroundColor: "#F9FAFB",
@@ -236,6 +288,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 24,
+    gap: 16,
   },
   logo: {
     width: 90,
@@ -253,6 +307,18 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     textAlign: "center",
     marginBottom: 12,
+  },
+  permissionText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1F2937",
+    textAlign: "center",
+  },
+  permissionSubtext: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    marginTop: 8,
   },
   imageContainer: {
     alignItems: "center",
