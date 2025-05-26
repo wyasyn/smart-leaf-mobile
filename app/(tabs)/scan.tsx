@@ -69,17 +69,20 @@ export default function ScanScreen() {
 
     try {
       const formData = new FormData();
-      formData.append("file", {
+      formData.append("files", {
         uri: selectedImage.uri,
         type: "image/jpeg",
         name: "leaf.jpg",
       } as any);
 
-      const response = await fetch("YOUR_FASTAPI_BACKEND_URL/predict", {
-        method: "POST",
-        body: formData,
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await fetch(
+        "https://yasyn14-smartleaf-api.hf.space/predict",
+        {
+          method: "POST",
+          body: formData,
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
 
       const result = await response.json();
 
