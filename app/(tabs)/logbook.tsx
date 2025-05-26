@@ -1,5 +1,6 @@
 import { addStorageListener, getPlantLogs, PlantLog } from "@/utils/constants";
 import { Ionicons } from "@expo/vector-icons";
+import * as FileSystem from "expo-file-system";
 import { useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -13,14 +14,45 @@ import {
   View,
 } from "react-native";
 
+interface LogItemWithImageStatus extends PlantLog {
+  imageLoadError?: boolean;
+}
+
 export default function LogbookScreen() {
-  const [logs, setLogs] = useState<PlantLog[]>([]);
+  const [logs, setLogs] = useState<LogItemWithImageStatus[]>([]);
 
   const loadLogs = useCallback(async () => {
     try {
       const savedLogs = await getPlantLogs();
-      setLogs(savedLogs);
-      console.log("Loaded logs:", savedLogs); // Debug log
+
+      // Check if images exist and add status
+      const logsWithImageStatus = await Promise.all(
+        savedLogs.map(async (log) => {
+          try {
+            const imageInfo = await FileSystem.getInfoAsync(log.image);
+            return {
+              ...log,
+              imageLoadError: !imageInfo.exists,
+            };
+          } catch (error) {
+            console.log(`Image check failed for ${log.id}:`, error);
+            return {
+              ...log,
+              imageLoadError: true,
+            };
+          }
+        })
+      );
+
+      setLogs(logsWithImageStatus);
+      console.log(
+        "Loaded logs with image status:",
+        logsWithImageStatus.map((log) => ({
+          id: log.id,
+          imageExists: !log.imageLoadError,
+          imagePath: log.image,
+        }))
+      );
     } catch (error) {
       console.error("Error loading logs:", error);
     }
@@ -47,29 +79,56 @@ export default function LogbookScreen() {
     });
   };
 
-  const renderLogItem = ({ item }: { item: PlantLog }) => {
-    console.log("Rendering log item with image URI:", item.image); // Debug log
+  const handleImageError = (logId: string) => {
+    console.log(`Image load failed for log ${logId}`);
+    setLogs((prevLogs) =>
+      prevLogs.map((log) =>
+        log.id === logId ? { ...log, imageLoadError: true } : log
+      )
+    );
+  };
+
+  const renderLogItem = ({ item }: { item: LogItemWithImageStatus }) => {
+    console.log(
+      `Rendering log ${item.id} - Image error status:`,
+      item.imageLoadError
+    );
 
     return (
       <View style={styles.logItem}>
         <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: item.image }}
-            style={styles.logImage}
-            onError={(error) => {
-              console.error("Image load error:", error.nativeEvent.error);
-              console.log("Failed image URI:", item.image);
-            }}
-            onLoad={() => {
-              console.log("Image loaded successfully:", item.image);
-            }}
-            // Add these props for better compatibility
-            resizeMode="cover"
-          />
-          {/* Fallback icon if image fails to load */}
-          <View style={styles.imageFallback}>
-            <Ionicons name="leaf-outline" size={24} color="#9CA3AF" />
-          </View>
+          {!item.imageLoadError ? (
+            <>
+              <Image
+                source={{ uri: item.image }}
+                style={styles.logImage}
+                onError={(error) => {
+                  console.error(
+                    `Image load error for log ${item.id}:`,
+                    error.nativeEvent.error
+                  );
+                  console.log("Failed image URI:", item.image);
+                  handleImageError(item.id);
+                }}
+                onLoad={() => {
+                  console.log(
+                    `Image loaded successfully for log ${item.id}:`,
+                    item.image
+                  );
+                }}
+                resizeMode="cover"
+              />
+              {/* Fallback that appears behind the image */}
+              <View style={styles.imageFallback}>
+                <Ionicons name="leaf-outline" size={24} color="#9CA3AF" />
+              </View>
+            </>
+          ) : (
+            // Show fallback immediately if we know the image doesn't exist
+            <View style={[styles.logImage, styles.imageFallbackVisible]}>
+              <Ionicons name="leaf-outline" size={24} color="#9CA3AF" />
+            </View>
+          )}
         </View>
         <View style={styles.logContent}>
           <Text style={styles.logDisease}>{item.disease}</Text>
@@ -77,6 +136,9 @@ export default function LogbookScreen() {
           <Text style={styles.logConfidence}>
             Confidence: {Math.round(item.confidence * 100)}%
           </Text>
+          {item.imageLoadError && (
+            <Text style={styles.imageErrorText}>Image unavailable</Text>
+          )}
         </View>
         <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
       </View>
@@ -196,6 +258,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     zIndex: -1, // Behind the actual image
   },
+  imageFallbackVisible: {
+    // When we know the image is missing, show the fallback directly
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F3F4F6",
+  },
   logContent: {
     flex: 1,
   },
@@ -214,5 +282,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#22C55E",
     fontWeight: "500",
+  },
+  imageErrorText: {
+    fontSize: 12,
+    color: "#EF4444",
+    fontStyle: "italic",
+    marginTop: 2,
   },
 });

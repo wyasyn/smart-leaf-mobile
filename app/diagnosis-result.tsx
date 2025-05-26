@@ -68,17 +68,29 @@ export default function DiagnosisResultScreen() {
     );
   }, [parsedDiagnosis]);
 
-  // Function to copy image to permanent location
+  // Enhanced function to copy image to permanent location
   const copyImageToPermanentLocation = async (
     sourceUri: string
   ): Promise<string> => {
     try {
+      console.log("Starting image copy process from:", sourceUri);
+
+      // First, verify the source file exists
+      const sourceInfo = await FileSystem.getInfoAsync(sourceUri);
+      if (!sourceInfo.exists) {
+        throw new Error(`Source image does not exist: ${sourceUri}`);
+      }
+
+      console.log("Source file exists, size:", sourceInfo.size);
+
       // Create a permanent directory for plant images
       const permanentDir = `${FileSystem.documentDirectory}plant_images/`;
+      console.log("Target directory:", permanentDir);
 
       // Ensure the directory exists
       const dirInfo = await FileSystem.getInfoAsync(permanentDir);
       if (!dirInfo.exists) {
+        console.log("Creating directory:", permanentDir);
         await FileSystem.makeDirectoryAsync(permanentDir, {
           intermediates: true,
         });
@@ -90,13 +102,25 @@ export default function DiagnosisResultScreen() {
       const fileName = `plant_${timestamp}.${fileExtension}`;
       const permanentUri = `${permanentDir}${fileName}`;
 
+      console.log("Copying to:", permanentUri);
+
       // Copy the file
       await FileSystem.copyAsync({
         from: sourceUri,
         to: permanentUri,
       });
 
-      console.log(`Image copied from ${sourceUri} to ${permanentUri}`);
+      // Verify the copy was successful
+      const copiedInfo = await FileSystem.getInfoAsync(permanentUri);
+      if (!copiedInfo.exists) {
+        throw new Error("File copy failed - destination file does not exist");
+      }
+
+      console.log(
+        `Image successfully copied from ${sourceUri} to ${permanentUri}`
+      );
+      console.log("Copied file size:", copiedInfo.size);
+
       return permanentUri;
     } catch (error) {
       console.error("Error copying image to permanent location:", error);
@@ -111,7 +135,7 @@ export default function DiagnosisResultScreen() {
     }
 
     try {
-      // Log the original image URI for debugging
+      console.log("=== Starting save to logbook process ===");
       console.log("Original image URI:", imageUri);
 
       // Ensure the imageUri is valid
@@ -120,31 +144,57 @@ export default function DiagnosisResultScreen() {
         return;
       }
 
-      // Copy image to permanent location
+      // Copy image to permanent location with better error handling
       let permanentImageUri: string;
       try {
         permanentImageUri = await copyImageToPermanentLocation(
           imageUri as string
         );
+        console.log("Image copy successful, permanent URI:", permanentImageUri);
       } catch (copyError) {
         console.error("Failed to copy image:", copyError);
-        // If copying fails, try to use the original URI (might work in some cases)
-        permanentImageUri = imageUri as string;
+
+        // Show user-friendly error message
+        Alert.alert(
+          "Image Save Error",
+          "Failed to save the image permanently. The diagnosis will be saved but the image may not be available later.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Save Anyway",
+              onPress: () => {
+                // Use original URI as fallback (might work in some cases)
+                permanentImageUri = imageUri as string;
+                proceedWithSave(permanentImageUri);
+              },
+            },
+          ]
+        );
+        return;
       }
 
+      proceedWithSave(permanentImageUri);
+    } catch (error) {
+      console.error("Failed to save plant log:", error);
+      Alert.alert("Error", "Failed to save to logbook");
+    }
+  };
+
+  const proceedWithSave = async (imageUri: string) => {
+    try {
       const newLog: PlantLog = {
         id: Date.now().toString(),
         date: new Date().toISOString(),
-        image: permanentImageUri, // Use the permanent URI
-        disease: parsedDiagnosis.clean_class_name,
-        confidence: parsedDiagnosis.confidence,
-        result: parsedDiagnosis.predicted_class,
+        image: imageUri,
+        disease: parsedDiagnosis!.clean_class_name,
+        confidence: parsedDiagnosis!.confidence,
+        result: parsedDiagnosis!.predicted_class,
         // Optional fields:
         treatment: isHealthy
           ? "Continue your current care routine. Monitor regularly for any changes in leaf color, texture, or growth patterns. Ensure proper watering, adequate light, and good air circulation."
           : "Consider consulting with a local agricultural expert or plant pathologist for specific treatment recommendations. Early intervention often leads to better outcomes.",
         description:
-          parsedDiagnosis.message ||
+          parsedDiagnosis!.message ||
           (isHealthy
             ? `Your ${plantInfo.plant.toLowerCase()} appears to be in good health! No signs of disease or pest damage were detected in the leaf analysis.`
             : `The analysis detected signs of ${plantInfo.condition.toLowerCase()} in your ${plantInfo.plant.toLowerCase()}. This condition may require attention to prevent further damage.`),
@@ -153,7 +203,7 @@ export default function DiagnosisResultScreen() {
           : `Signs of ${plantInfo.condition.toLowerCase()} detected`,
       };
 
-      console.log("Saving plant log with permanent image URI:", newLog.image);
+      console.log("Saving plant log:", newLog);
 
       await savePlantLog(newLog);
       console.log("Plant log saved successfully");
@@ -161,9 +211,6 @@ export default function DiagnosisResultScreen() {
       Alert.alert("Success", "Diagnosis saved to logbook!", [
         { text: "OK", onPress: () => router.push("/logbook") },
       ]);
-
-      // The real-time update system will automatically notify all screens
-      // that are listening for storage changes (HomeScreen, LogbookScreen)
     } catch (error) {
       console.error("Failed to save plant log:", error);
       Alert.alert("Error", "Failed to save to logbook");
@@ -209,6 +256,17 @@ export default function DiagnosisResultScreen() {
           <Image
             source={{ uri: imageUri as string }}
             style={styles.leafImage}
+            onError={(error) => {
+              console.error(
+                "Main image display error:",
+                error.nativeEvent.error
+              );
+              console.log("Failed to display image URI:", imageUri);
+            }}
+            onLoad={() => {
+              console.log("Main image loaded successfully:", imageUri);
+            }}
+            resizeMode="cover"
           />
         </View>
 
