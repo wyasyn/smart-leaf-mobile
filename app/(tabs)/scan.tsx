@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Camera } from "expo-camera";
+import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
@@ -37,7 +38,11 @@ type PickerAsset = ImagePicker.ImagePickerAsset | null;
 export default function ScanScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [selectedImage, setSelectedImage] = useState<PickerAsset>(null);
+  const [permanentImageUri, setPermanentImageUri] = useState<string | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(false);
+  const [isSavingImage, setIsSavingImage] = useState(false);
   const mounted = useRef(true);
 
   /* ───────── permissions ───────── */
@@ -52,6 +57,66 @@ export default function ScanScreen() {
       mounted.current = false;
     };
   }, []);
+
+  /* ───────── Enhanced function to copy image to permanent location ───────── */
+  const copyImageToPermanentLocation = async (
+    sourceUri: string
+  ): Promise<string> => {
+    try {
+      console.log("Starting image copy process from:", sourceUri);
+
+      // First, verify the source file exists
+      const sourceInfo = await FileSystem.getInfoAsync(sourceUri);
+      if (!sourceInfo.exists) {
+        throw new Error(`Source image does not exist: ${sourceUri}`);
+      }
+
+      console.log("Source file exists, size:", sourceInfo.size);
+
+      // Create a permanent directory for plant images
+      const permanentDir = `${FileSystem.documentDirectory}plant_images/`;
+      console.log("Target directory:", permanentDir);
+
+      // Ensure the directory exists
+      const dirInfo = await FileSystem.getInfoAsync(permanentDir);
+      if (!dirInfo.exists) {
+        console.log("Creating directory:", permanentDir);
+        await FileSystem.makeDirectoryAsync(permanentDir, {
+          intermediates: true,
+        });
+      }
+
+      // Generate a unique filename
+      const timestamp = Date.now();
+      const fileExtension = sourceUri.split(".").pop() || "jpeg";
+      const fileName = `plant_${timestamp}.${fileExtension}`;
+      const permanentUri = `${permanentDir}${fileName}`;
+
+      console.log("Copying to:", permanentUri);
+
+      // Copy the file
+      await FileSystem.copyAsync({
+        from: sourceUri,
+        to: permanentUri,
+      });
+
+      // Verify the copy was successful
+      const copiedInfo = await FileSystem.getInfoAsync(permanentUri);
+      if (!copiedInfo.exists) {
+        throw new Error("File copy failed - destination file does not exist");
+      }
+
+      console.log(
+        `Image successfully copied from ${sourceUri} to ${permanentUri}`
+      );
+      console.log("Copied file size:", copiedInfo.size);
+
+      return permanentUri;
+    } catch (error) {
+      console.error("Error copying image to permanent location:", error);
+      throw error;
+    }
+  };
 
   /* ───────── helpers ───────── */
   const launchPicker = async (fromCamera: boolean) => {
@@ -68,7 +133,35 @@ export default function ScanScreen() {
 
     if (!result.canceled) {
       Haptics.selectionAsync();
-      setSelectedImage(result.assets[0]);
+      const pickedImage = result.assets[0];
+      setSelectedImage(pickedImage);
+
+      // Immediately save the image to permanent storage
+      setIsSavingImage(true);
+      try {
+        console.log("=== Saving image immediately after selection ===");
+        console.log("Temporary image URI:", pickedImage.uri);
+
+        const permanentUri = await copyImageToPermanentLocation(
+          pickedImage.uri
+        );
+        setPermanentImageUri(permanentUri);
+        console.log("Image saved permanently at:", permanentUri);
+
+        // Show a brief success indicator
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (error) {
+        console.error("Failed to save image immediately:", error);
+        Alert.alert(
+          "Image Save Warning",
+          "Failed to save image to permanent storage. You can still analyze it, but it may not be available later in your logbook.",
+          [{ text: "OK" }]
+        );
+        // Keep the temporary URI as fallback
+        setPermanentImageUri(pickedImage.uri);
+      } finally {
+        setIsSavingImage(false);
+      }
     }
   };
 
@@ -88,6 +181,7 @@ export default function ScanScreen() {
       const uriParts = selectedImage.uri.split(".");
       const fileExtension = uriParts[uriParts.length - 1] || "jpg";
 
+      // Use the original temporary URI for analysis (since it's more likely to exist during analysis)
       formData.append("file", {
         uri: selectedImage.uri,
         type: `image/${fileExtension}`,
@@ -129,7 +223,8 @@ export default function ScanScreen() {
         router.push({
           pathname: "/diagnosis-result",
           params: {
-            imageUri: selectedImage.uri,
+            // Pass the permanent URI (or fallback to temp URI)
+            imageUri: permanentImageUri || selectedImage.uri,
             diagnosis: JSON.stringify(result),
           },
         });
@@ -149,7 +244,7 @@ export default function ScanScreen() {
         setIsLoading(false);
       }
     }
-  }, [selectedImage]);
+  }, [selectedImage, permanentImageUri]);
 
   /* ───────── UI ───────── */
   if (hasPermission === null) {
@@ -193,12 +288,31 @@ export default function ScanScreen() {
               <Image source={{ uri: selectedImage.uri }} style={styles.image} />
               <TouchableOpacity
                 style={styles.removeButton}
-                onPress={() => setSelectedImage(null)}
+                onPress={() => {
+                  setSelectedImage(null);
+                  setPermanentImageUri(null);
+                }}
                 accessibilityRole="button"
                 accessibilityLabel="Remove selected image"
               >
                 <Ionicons name="close-circle" size={24} color="#EF4444" />
               </TouchableOpacity>
+
+              {/* Show saving indicator */}
+              {isSavingImage && (
+                <View style={styles.savingIndicator}>
+                  <ActivityIndicator size="small" color="#22C55E" />
+                  <Text style={styles.savingText}>Saving...</Text>
+                </View>
+              )}
+
+              {/* Show success indicator */}
+              {permanentImageUri && !isSavingImage && (
+                <View style={styles.savedIndicator}>
+                  <Ionicons name="checkmark-circle" size={16} color="#22C55E" />
+                  <Text style={styles.savedText}>Saved</Text>
+                </View>
+              )}
             </View>
           )}
 
@@ -208,20 +322,25 @@ export default function ScanScreen() {
               icon="camera"
               label="Take Photo"
               onPress={() => launchPicker(true)}
+              disabled={isSavingImage}
             />
             <ActionBtn
               icon="image"
               label="Choose from Gallery"
               onPress={() => launchPicker(false)}
+              disabled={isSavingImage}
             />
           </View>
 
           {/* Analyse */}
           {selectedImage && (
             <TouchableOpacity
-              style={[styles.analyzeButton, isLoading && styles.disabledButton]}
+              style={[
+                styles.analyzeButton,
+                (isLoading || isSavingImage) && styles.disabledButton,
+              ]}
               onPress={analyzeImage}
-              disabled={isLoading}
+              disabled={isLoading || isSavingImage}
               accessibilityRole="button"
               accessibilityLabel="Analyze selected image"
             >
@@ -230,7 +349,9 @@ export default function ScanScreen() {
               ) : (
                 <>
                   <Ionicons name="analytics" size={24} color="white" />
-                  <Text style={styles.analyzeButtonText}>Analyze Image</Text>
+                  <Text style={styles.analyzeButtonText}>
+                    {isSavingImage ? "Saving Image..." : "Analyze Image"}
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
@@ -246,14 +367,17 @@ const ActionBtn = ({
   icon,
   label,
   onPress,
+  disabled = false,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
+  disabled?: boolean;
 }) => (
   <TouchableOpacity
-    style={styles.actionButton}
+    style={[styles.actionButton, disabled && styles.disabledButton]}
     onPress={onPress}
+    disabled={disabled}
     accessibilityRole="button"
     accessibilityLabel={label}
     activeOpacity={0.85}
@@ -335,6 +459,38 @@ const styles = StyleSheet.create({
     right: -10,
     backgroundColor: "white",
     borderRadius: 12,
+  },
+  savingIndicator: {
+    position: "absolute",
+    bottom: -30,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  savingText: {
+    fontSize: 12,
+    color: "#22C55E",
+    fontWeight: "500",
+  },
+  savedIndicator: {
+    position: "absolute",
+    bottom: -30,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(34, 197, 94, 0.1)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  savedText: {
+    fontSize: 12,
+    color: "#22C55E",
+    fontWeight: "500",
   },
   buttonsContainer: {
     width: "100%",
