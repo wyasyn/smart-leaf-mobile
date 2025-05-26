@@ -8,6 +8,98 @@ export async function getHasOnboarded() {
   return AsyncStorage.getItem(HAS_ONBOARDED);
 }
 
+// Consistent storage key
+export const STORAGE_KEYS = {
+  PLANT_LOGS: "plantLogs", // Use the same key everywhere
+} as const;
+
+// Unified data structure
+export interface PlantLog {
+  id: string;
+  date: string; // ISO string
+  image: string;
+  disease: string;
+  confidence: number;
+  treatment?: string;
+  description?: string;
+  symptoms?: string;
+  result: string; // Keep for backward compatibility
+}
+
+// Event system for real-time updates
+type StorageEventCallback = () => void;
+const storageEventListeners: StorageEventCallback[] = [];
+
+export const addStorageListener = (callback: StorageEventCallback) => {
+  storageEventListeners.push(callback);
+
+  // Return cleanup function
+  return () => {
+    const index = storageEventListeners.indexOf(callback);
+    if (index > -1) {
+      storageEventListeners.splice(index, 1);
+    }
+  };
+};
+
+const notifyStorageListeners = () => {
+  storageEventListeners.forEach((callback) => callback());
+};
+
+// Storage operations
+export const getPlantLogs = async (): Promise<PlantLog[]> => {
+  try {
+    const logs = await AsyncStorage.getItem(STORAGE_KEYS.PLANT_LOGS);
+    return logs ? JSON.parse(logs) : [];
+  } catch (error) {
+    console.error("Error loading plant logs:", error);
+    return [];
+  }
+};
+
+export const savePlantLog = async (log: PlantLog): Promise<void> => {
+  try {
+    const existingLogs = await getPlantLogs();
+    const updatedLogs = [log, ...existingLogs]; // Add new log at the beginning
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.PLANT_LOGS,
+      JSON.stringify(updatedLogs)
+    );
+    notifyStorageListeners();
+  } catch (error) {
+    console.error("Error saving plant log:", error);
+    throw error;
+  }
+};
+
+export const clearPlantLogs = async (): Promise<void> => {
+  try {
+    await AsyncStorage.removeItem(STORAGE_KEYS.PLANT_LOGS);
+    notifyStorageListeners();
+  } catch (error) {
+    console.error("Error clearing plant logs:", error);
+    throw error;
+  }
+};
+
+// Statistics helpers
+export const getPlantLogStats = async () => {
+  try {
+    const logs = await getPlantLogs();
+    const totalScans = logs.length;
+
+    const todayStr = new Date().toDateString();
+    const todayScans = logs.filter(
+      (log) => new Date(log.date).toDateString() === todayStr
+    ).length;
+
+    return { totalScans, todayScans };
+  } catch (error) {
+    console.error("Error getting plant log stats:", error);
+    return { totalScans: 0, todayScans: 0 };
+  }
+};
+
 // Enhanced Disease Data Structure
 export interface Disease {
   id: number;

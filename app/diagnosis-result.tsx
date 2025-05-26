@@ -1,5 +1,6 @@
+import { PlantLog, savePlantLog } from "@/utils/constants";
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useMemo } from "react";
 import {
@@ -23,16 +24,6 @@ interface PredictionResponse {
   confidence: number;
   all_predictions: Record<string, number>;
   message: string;
-}
-
-interface LogEntry {
-  id: number;
-  date: string;
-  image: string;
-  predicted_class: string;
-  clean_class_name: string;
-  confidence: number;
-  top_predictions: { name: string; confidence: number }[];
 }
 
 export default function DiagnosisResultScreen() {
@@ -77,6 +68,42 @@ export default function DiagnosisResultScreen() {
     );
   }, [parsedDiagnosis]);
 
+  // Function to copy image to permanent location
+  const copyImageToPermanentLocation = async (
+    sourceUri: string
+  ): Promise<string> => {
+    try {
+      // Create a permanent directory for plant images
+      const permanentDir = `${FileSystem.documentDirectory}plant_images/`;
+
+      // Ensure the directory exists
+      const dirInfo = await FileSystem.getInfoAsync(permanentDir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(permanentDir, {
+          intermediates: true,
+        });
+      }
+
+      // Generate a unique filename
+      const timestamp = Date.now();
+      const fileExtension = sourceUri.split(".").pop() || "jpeg";
+      const fileName = `plant_${timestamp}.${fileExtension}`;
+      const permanentUri = `${permanentDir}${fileName}`;
+
+      // Copy the file
+      await FileSystem.copyAsync({
+        from: sourceUri,
+        to: permanentUri,
+      });
+
+      console.log(`Image copied from ${sourceUri} to ${permanentUri}`);
+      return permanentUri;
+    } catch (error) {
+      console.error("Error copying image to permanent location:", error);
+      throw error;
+    }
+  };
+
   const saveToLogbook = async () => {
     if (!parsedDiagnosis) {
       Alert.alert("Error", "No diagnosis data to save");
@@ -84,26 +111,61 @@ export default function DiagnosisResultScreen() {
     }
 
     try {
-      const logEntry: LogEntry = {
-        id: Date.now(),
+      // Log the original image URI for debugging
+      console.log("Original image URI:", imageUri);
+
+      // Ensure the imageUri is valid
+      if (!imageUri || typeof imageUri !== "string") {
+        Alert.alert("Error", "No image to save");
+        return;
+      }
+
+      // Copy image to permanent location
+      let permanentImageUri: string;
+      try {
+        permanentImageUri = await copyImageToPermanentLocation(
+          imageUri as string
+        );
+      } catch (copyError) {
+        console.error("Failed to copy image:", copyError);
+        // If copying fails, try to use the original URI (might work in some cases)
+        permanentImageUri = imageUri as string;
+      }
+
+      const newLog: PlantLog = {
+        id: Date.now().toString(),
         date: new Date().toISOString(),
-        image: imageUri as string,
-        predicted_class: parsedDiagnosis.predicted_class,
-        clean_class_name: parsedDiagnosis.clean_class_name,
+        image: permanentImageUri, // Use the permanent URI
+        disease: parsedDiagnosis.clean_class_name,
         confidence: parsedDiagnosis.confidence,
-        top_predictions: topPredictions,
+        result: parsedDiagnosis.predicted_class,
+        // Optional fields:
+        treatment: isHealthy
+          ? "Continue your current care routine. Monitor regularly for any changes in leaf color, texture, or growth patterns. Ensure proper watering, adequate light, and good air circulation."
+          : "Consider consulting with a local agricultural expert or plant pathologist for specific treatment recommendations. Early intervention often leads to better outcomes.",
+        description:
+          parsedDiagnosis.message ||
+          (isHealthy
+            ? `Your ${plantInfo.plant.toLowerCase()} appears to be in good health! No signs of disease or pest damage were detected in the leaf analysis.`
+            : `The analysis detected signs of ${plantInfo.condition.toLowerCase()} in your ${plantInfo.plant.toLowerCase()}. This condition may require attention to prevent further damage.`),
+        symptoms: isHealthy
+          ? "No visible symptoms detected"
+          : `Signs of ${plantInfo.condition.toLowerCase()} detected`,
       };
 
-      const existingLogs = await AsyncStorage.getItem("plantLogs");
-      const logs = existingLogs ? JSON.parse(existingLogs) : [];
-      logs.unshift(logEntry);
+      console.log("Saving plant log with permanent image URI:", newLog.image);
 
-      await AsyncStorage.setItem("plantLogs", JSON.stringify(logs));
+      await savePlantLog(newLog);
+      console.log("Plant log saved successfully");
+
       Alert.alert("Success", "Diagnosis saved to logbook!", [
         { text: "OK", onPress: () => router.push("/logbook") },
       ]);
+
+      // The real-time update system will automatically notify all screens
+      // that are listening for storage changes (HomeScreen, LogbookScreen)
     } catch (error) {
-      console.error("Error saving to logbook:", error);
+      console.error("Failed to save plant log:", error);
       Alert.alert("Error", "Failed to save to logbook");
     }
   };

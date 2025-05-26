@@ -1,8 +1,8 @@
+import { addStorageListener, getPlantLogStats } from "@/utils/constants";
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
-import { router, useFocusEffect } from "expo-router"; // expo-router re-exports useFocusEffect
-import React, { useCallback, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Platform,
   RefreshControl,
@@ -15,22 +15,6 @@ import {
   View,
 } from "react-native";
 
-/* ──────────────────────────────────
-   Types & constants
-   ────────────────────────────────── */
-const STORAGE_KEYS = {
-  PLANT_LOGS: "@plantLogs",
-} as const;
-
-interface PlantLog {
-  id: string;
-  date: string; // ISO string
-  result: string; // whatever you store (diagnosis, etc.)
-}
-
-/* ──────────────────────────────────
-   Screen component
-   ────────────────────────────────── */
 export default function HomeScreen() {
   const [totalScans, setTotalScans] = useState(0);
   const [todayScans, setTodayScans] = useState(0);
@@ -39,25 +23,19 @@ export default function HomeScreen() {
   /* loadStats is memoised so the reference stays stable */
   const loadStats = useCallback(async () => {
     try {
-      const logs = await AsyncStorage.getItem(STORAGE_KEYS.PLANT_LOGS);
-      if (!logs) {
-        setTotalScans(0);
-        setTodayScans(0);
-        return;
-      }
-
-      const parsedLogs: PlantLog[] = JSON.parse(logs);
-      setTotalScans(parsedLogs.length);
-
-      const todayStr = new Date().toDateString();
-      const todayCount = parsedLogs.filter(
-        (log) => new Date(log.date).toDateString() === todayStr
-      ).length;
-      setTodayScans(todayCount);
+      const stats = await getPlantLogStats();
+      setTotalScans(stats.totalScans);
+      setTodayScans(stats.todayScans);
     } catch (error) {
       console.error("Error loading stats:", error);
     }
   }, []);
+
+  /* Set up real-time updates listener */
+  useEffect(() => {
+    const unsubscribe = addStorageListener(loadStats);
+    return unsubscribe; // Cleanup listener on unmount
+  }, [loadStats]);
 
   /* Run once on mount *and* every time the screen gets focus */
   useFocusEffect(
@@ -181,7 +159,7 @@ export default function HomeScreen() {
 }
 
 /* ──────────────────────────────────
-   Styles
+   Styles (unchanged)
    ────────────────────────────────── */
 const styles = StyleSheet.create({
   container: {

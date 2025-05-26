@@ -1,7 +1,7 @@
+import { addStorageListener, getPlantLogs, PlantLog } from "@/utils/constants";
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Image,
@@ -13,35 +13,29 @@ import {
   View,
 } from "react-native";
 
-interface LogEntry {
-  id: number;
-  date: string;
-  image: string;
-  disease: string;
-  confidence: number;
-  treatment: string;
-  description: string;
-  symptoms: string;
-}
-
 export default function LogbookScreen() {
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [logs, setLogs] = useState<PlantLog[]>([]);
 
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     try {
-      const savedLogs = await AsyncStorage.getItem("plantLogs");
-      if (savedLogs) {
-        setLogs(JSON.parse(savedLogs));
-      }
+      const savedLogs = await getPlantLogs();
+      setLogs(savedLogs);
+      console.log("Loaded logs:", savedLogs); // Debug log
     } catch (error) {
       console.error("Error loading logs:", error);
     }
-  };
+  }, []);
+
+  /* Set up real-time updates listener */
+  useEffect(() => {
+    const unsubscribe = addStorageListener(loadLogs);
+    return unsubscribe; // Cleanup listener on unmount
+  }, [loadLogs]);
 
   useFocusEffect(
     useCallback(() => {
       loadLogs();
-    }, [])
+    }, [loadLogs])
   );
 
   const formatDate = (dateString: string) => {
@@ -53,19 +47,41 @@ export default function LogbookScreen() {
     });
   };
 
-  const renderLogItem = ({ item }: { item: LogEntry }) => (
-    <View style={styles.logItem}>
-      <Image source={{ uri: item.image }} style={styles.logImage} />
-      <View style={styles.logContent}>
-        <Text style={styles.logDisease}>{item.disease}</Text>
-        <Text style={styles.logDate}>{formatDate(item.date)}</Text>
-        <Text style={styles.logConfidence}>
-          Confidence: {Math.round(item.confidence * 100)}%
-        </Text>
+  const renderLogItem = ({ item }: { item: PlantLog }) => {
+    console.log("Rendering log item with image URI:", item.image); // Debug log
+
+    return (
+      <View style={styles.logItem}>
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: item.image }}
+            style={styles.logImage}
+            onError={(error) => {
+              console.error("Image load error:", error.nativeEvent.error);
+              console.log("Failed image URI:", item.image);
+            }}
+            onLoad={() => {
+              console.log("Image loaded successfully:", item.image);
+            }}
+            // Add these props for better compatibility
+            resizeMode="cover"
+          />
+          {/* Fallback icon if image fails to load */}
+          <View style={styles.imageFallback}>
+            <Ionicons name="leaf-outline" size={24} color="#9CA3AF" />
+          </View>
+        </View>
+        <View style={styles.logContent}>
+          <Text style={styles.logDisease}>{item.disease}</Text>
+          <Text style={styles.logDate}>{formatDate(item.date)}</Text>
+          <Text style={styles.logConfidence}>
+            Confidence: {Math.round(item.confidence * 100)}%
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
       </View>
-      <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -158,11 +174,27 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  imageContainer: {
+    position: "relative",
+    marginRight: 16,
+  },
   logImage: {
     width: 60,
     height: 60,
     borderRadius: 8,
-    marginRight: 16,
+    backgroundColor: "#F3F4F6", // Light gray background
+  },
+  imageFallback: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F3F4F6",
+    borderRadius: 8,
+    zIndex: -1, // Behind the actual image
   },
   logContent: {
     flex: 1,

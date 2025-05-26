@@ -1,4 +1,4 @@
-import { HAS_ONBOARDED } from "@/utils/constants";
+import { clearPlantLogs, HAS_ONBOARDED } from "@/utils/constants";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React from "react";
@@ -26,7 +26,7 @@ export default function SettingsScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              await AsyncStorage.removeItem("plantLogs");
+              await clearPlantLogs();
               Alert.alert("Success", "History cleared successfully");
             } catch (error) {
               console.error("Error clearing history:", error);
@@ -140,6 +140,7 @@ export default function SettingsScreen() {
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
