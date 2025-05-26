@@ -16,7 +16,10 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#f5f5f5"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -43,12 +46,20 @@
       [
         "expo-font",
         {
-          "fonts": ["./assets/fonts/Inter.ttf"]
+          "fonts": [
+            "./assets/fonts/Inter.ttf"
+          ]
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6e2ee1af-c689-4f88-b866-08af13b76476"
+      }
     }
   }
 }
