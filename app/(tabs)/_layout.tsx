@@ -1,5 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
+import { Platform, StyleSheet, View } from "react-native";
 
 export default function TabLayout() {
   return (
@@ -8,39 +10,49 @@ export default function TabLayout() {
         tabBarActiveTintColor: "#22C55E",
         tabBarInactiveTintColor: "#6B7280",
         headerShown: false,
-        tabBarLabelStyle: {
-          fontSize: 9,
-          fontWeight: "500",
-        },
+
+        /** ---------- label ---------- */
+        tabBarLabelStyle: { fontSize: 9, fontWeight: "500" },
+
+        /** ---------- container ---------- */
         tabBarStyle: {
-          backgroundColor: "white",
-          borderTopWidth: 1,
-          borderTopColor: "#E5E7EB",
-          paddingBottom: 5,
-          justifyContent: "space-between",
-          alignItems: "center",
-          paddingTop: 5,
-          height: 60,
           position: "absolute",
           bottom: 12,
-          borderCurve: "continuous",
+          left: 16,
+          right: 16,
+          height: 60,
           borderRadius: 20,
-          marginHorizontal: 16,
-          paddingVertical: 15,
-          shadowOpacity: 0.25,
-          shadowColor: "#000",
-          shadowOffset: {
-            width: 0,
-            height: 10,
-          },
+          overflow: "hidden", // keeps blur inside curve
+          borderTopWidth: 0,
+          elevation: 0,
+          backgroundColor: "transparent", // let BlurView fully show through
         },
+
+        /** ---------- frosted background ---------- */
+        tabBarBackground: () => (
+          <BlurView
+            // iOS “ultraThinMaterial” is the classic frosted glass;
+            // Android uses the closest approximation.
+            tint={Platform.OS === "ios" ? "systemMaterialLight" : "light"}
+            intensity={60} // 40–80 feels right
+            style={StyleSheet.absoluteFill} // full cover
+          >
+            {/* subtle translucent film so content below is desaturated */}
+            <View
+              style={{
+                ...StyleSheet.absoluteFillObject,
+                backgroundColor: "rgba(255,255,255,0.7)", // ⇦ tweak alpha to taste
+              }}
+            />
+          </BlurView>
+        ),
       }}
     >
+      {/**  ----- screens ----- */}
       <Tabs.Screen
         name="index"
         options={{
           title: "Home",
-
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "home" : "home-outline"}

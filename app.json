@@ -39,6 +39,12 @@
         {
           "photosPermission": "The app accesses your photos to let you analyze your crops wit AI."
         }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": ["./assets/fonts/Inter.ttf"]
+        }
       ]
     ],
     "experiments": {

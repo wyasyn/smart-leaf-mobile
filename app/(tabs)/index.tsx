@@ -56,30 +56,35 @@ export default function HomeScreen() {
     id: number;
     title: string;
     icon: keyof typeof Ionicons.glyphMap;
+    bg?: string; // Optional background color
     action: () => void;
   }[] = [
     {
       id: 1,
       title: "Scan Leaf",
       icon: "camera",
+      bg: "#ECFAE5",
       action: () => router.push("/scan"),
     },
     {
       id: 2,
       title: "View History",
       icon: "book",
+      bg: "#F4F8D3",
       action: () => router.push("/logbook"),
     },
     {
       id: 3,
       title: "Disease Info",
       icon: "information-circle",
+      bg: "#FFEDFA",
       action: () => router.push("/diseases"),
     },
     {
       id: 4,
       title: "Settings",
       icon: "settings",
+      bg: "#D1F8EF",
       action: () => router.push("/settings"),
     },
   ];
@@ -121,10 +126,22 @@ export default function HomeScreen() {
         <View style={styles.quickActionsContainer}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickActionsGrid}>
-            {quickActions.map(({ id, title, icon, action }) => (
+            {quickActions.map(({ id, title, icon, action, bg }) => (
               <TouchableOpacity
                 key={id}
-                style={styles.quickActionCard}
+                style={{
+                  flex: 1,
+                  minWidth: "47%",
+                  backgroundColor: bg || "#ffffff",
+                  paddingVertical: 24,
+                  borderRadius: 14,
+                  alignItems: "center",
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 2,
+                  elevation: 2,
+                }}
                 onPress={() => {
                   Haptics.selectionAsync();
                   action();
@@ -216,7 +233,7 @@ const styles = StyleSheet.create({
   quickActionCard: {
     flex: 1,
     minWidth: "47%",
-    backgroundColor: "white",
+    backgroundColor: "#ECFAE5",
     paddingVertical: 24,
     borderRadius: 14,
     alignItems: "center",
@@ -243,7 +260,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: "white",
+    backgroundColor: "#F5EFFF",
     paddingVertical: 26,
     borderRadius: 14,
     alignItems: "center",
